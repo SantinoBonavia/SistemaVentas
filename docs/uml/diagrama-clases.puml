@@ -1,0 +1,49 @@
+@startuml
+
+class Cliente {
+  - id: int
+  - nombre: String
+  - apellido: String
+  - dni: String
+  - email: String
+  - telefono: String
+}
+
+class Categoria {
+  - id: int
+  - nombre: String
+  - descripcion: String
+}
+
+class Producto {
+  - id: int
+  - nombre: String
+  - precio: double
+  - stock: int
+  + aumentarStock()
+  + disminuirStock()
+  + hayStock(): boolean
+}
+
+class Venta {
+  - id: int
+  - fecha: LocalDateTime
+  - total: double
+  + calcularTotal(): double
+  + finalizarVenta()
+}
+
+class DetalleVenta {
+  - id: int
+  - cantidad: int
+  - precioUnitario: double
+  - subtotal: double
+  + calcularSubtotal(): double
+}
+
+Cliente "1" -- "0..*" Venta
+Categoria "1" -- "0..*" Producto
+Venta "1" -- "1..*" DetalleVenta
+Producto "1" -- "0..*" DetalleVenta
+
+@enduml
