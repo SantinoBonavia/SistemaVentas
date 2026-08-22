@@ -1,0 +1,12 @@
+# Maven
+target/
+
+# VS Code
+.vscode/
+
+# Credenciales
+.env
+config.properties
+
+# Sistema
+.DS_Store
