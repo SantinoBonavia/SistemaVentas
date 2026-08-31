@@ -1,11 +1,12 @@
 package com.sistemaventas.model;
 
+import java.math.BigDecimal;
+
 public class Producto {
     
     private int id;
     private String nombre;
-    private String descripcion;
-    private double precio;
+    private BigDecimal precio;
     private int stock;
     private Categoria categoria;
 
@@ -13,10 +14,9 @@ public class Producto {
     public Producto() {
     }
 
-    public Producto(int id, String nombre, String descripcion, double precio, int stock, Categoria categoria) {
+    public Producto(int id, String nombre, BigDecimal precio, int stock, Categoria categoria) {
         this.id = id;
         this.nombre = nombre;
-        this.descripcion = descripcion;
         this.precio = precio;
         this.stock = stock;
         this.categoria = categoria;
@@ -38,19 +38,11 @@ public class Producto {
         this.nombre = nombre;
     }
 
-    public String getDescripcion() {
-        return descripcion;
-    }
-
-    public void setDescripcion(String descripcion) {
-        this.descripcion = descripcion;
-    }
-
-    public double getPrecio() {
+    public BigDecimal getPrecio() {
         return precio;
     }
 
-    public void setPrecio(double precio) {
+    public void setPrecio(BigDecimal precio) {
         this.precio = precio;
     }
 

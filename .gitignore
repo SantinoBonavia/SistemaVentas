@@ -1,6 +1,10 @@
 # Maven
 target/
 
+# Local agent registry
+.atl/
+.codegraph/
+
 # VS Code
 .vscode/
 

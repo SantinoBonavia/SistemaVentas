@@ -26,7 +26,8 @@ CREATE TABLE `categorias` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nombre` varchar(100) NOT NULL,
   `descripcion` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `categorias_nombre_unique` (`nombre`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -38,6 +39,20 @@ LOCK TABLES `categorias` WRITE;
 /*!40000 ALTER TABLE `categorias` DISABLE KEYS */;
 /*!40000 ALTER TABLE `categorias` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Table structure for table `app_settings`
+--
+
+DROP TABLE IF EXISTS `app_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `app_settings` (
+  `setting_key` varchar(64) NOT NULL,
+  `setting_value` varchar(16) NOT NULL,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `clientes`
@@ -116,7 +131,7 @@ CREATE TABLE `productos` (
   `categoria_id` int NOT NULL,
   PRIMARY KEY (`id`),
   KEY `fk_productos_categoria_idx` (`categoria_id`),
-  CONSTRAINT `chk_productos_precio` CHECK ((`precio` >= 0)),
+  CONSTRAINT `chk_productos_precio` CHECK ((`precio` > 0)),
   CONSTRAINT `chk_productos_stock` CHECK ((`stock` >= 0)),
   CONSTRAINT `fk_productos_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `categorias` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
