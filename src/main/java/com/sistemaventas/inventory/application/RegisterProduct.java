@@ -4,9 +4,9 @@ import com.sistemaventas.inventory.port.ProductRegistrationPort;
 import com.sistemaventas.inventory.port.ProductRegistrationPort.ProductDetails;
 import com.sistemaventas.inventory.port.ProductRegistrationPort.ProductRegistrationException;
 import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class RegisterProduct {
     private static final String PRICE_MESSAGE = "Price must be a positive plain decimal with at most two fractional digits.";
@@ -16,7 +16,7 @@ public final class RegisterProduct {
     private static final String CONFIRMATION_FAILURE_MESSAGE = "Duplicate confirmation is invalid or has expired.";
 
     private final ProductRegistrationPort port;
-    private final Map<String, ProductDetails> pendingDuplicates = new HashMap<>();
+    private final Map<String, ProductDetails> pendingDuplicates = new ConcurrentHashMap<>();
 
     public RegisterProduct(ProductRegistrationPort port) {
         this.port = port;

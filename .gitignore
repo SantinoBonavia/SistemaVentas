@@ -4,6 +4,7 @@ target/
 # Local agent registry
 .atl/
 .codegraph/
+.mysql-test.env
 
 # VS Code
 .vscode/

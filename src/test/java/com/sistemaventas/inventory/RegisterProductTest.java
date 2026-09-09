@@ -14,6 +14,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 class RegisterProductTest {
@@ -161,6 +165,45 @@ class RegisterProductTest {
         );
 
         assertFailure(result, "Product could not be registered. Please try again.");
+    }
+
+    @Test
+    void confirmsOnePendingDuplicateExactlyOnceWhenWorkersOverlap() throws Exception {
+        FakeProductRegistrationPort port = new FakeProductRegistrationPort();
+        port.knownProductNames.add("Coffee");
+        RegisterProduct registerProduct = new RegisterProduct(port);
+        RegistrationResult.ConfirmationRequired pending = assertInstanceOf(
+                RegistrationResult.ConfirmationRequired.class,
+                registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "0"))
+        );
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<RegistrationResult>> confirmations = new ArrayList<>();
+            for (int index = 0; index < 32; index++) {
+                confirmations.add(executor.submit(() -> {
+                    start.await();
+                    return registerProduct.confirm(pending.confirmation().token());
+                }));
+            }
+
+            start.countDown();
+            int created = 0;
+            int rejected = 0;
+            for (Future<RegistrationResult> confirmation : confirmations) {
+                if (confirmation.get() instanceof RegistrationResult.Created) {
+                    created++;
+                } else {
+                    rejected++;
+                }
+            }
+
+            assertEquals(1, created);
+            assertEquals(31, rejected);
+            assertEquals(List.of(new CreatedProduct("Coffee", new BigDecimal("12.50"), "Beverages", 0)), port.createdProducts);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private void assertValidation(RegistrationResult result, String field, String message) {
