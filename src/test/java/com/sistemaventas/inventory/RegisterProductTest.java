@@ -28,15 +28,31 @@ class RegisterProductTest {
         RegisterProduct registerProduct = new RegisterProduct(port);
 
         RegistrationResult result = registerProduct.register(
-                new ProductRegistrationCommand("  Coffee  ", "12.50", " Beverages ", "0")
+                new ProductRegistrationCommand("  Coffee  ", " $2.400,00 ", " Beverages ", "0")
         );
 
         RegistrationResult.Created created = assertInstanceOf(RegistrationResult.Created.class, result);
         assertEquals(1L, created.productId());
         assertEquals("Product registered successfully.", created.message());
-        assertEquals(List.of(new CreatedProduct("Coffee", new BigDecimal("12.50"), "Beverages", 0)), port.createdProducts);
+        assertEquals(List.of(new CreatedProduct("Coffee", new BigDecimal("2400.00"), "Beverages", 0)), port.createdProducts);
         assertEquals(2, port.createdProducts.get(0).price().scale());
         assertEquals(Set.of("Beverages"), port.categories);
+    }
+
+    @Test
+    void normalizesPlainWholeAndOneDecimalPricesBeforeDelegatingToThePort() {
+        FakeProductRegistrationPort port = new FakeProductRegistrationPort();
+        RegisterProduct registerProduct = new RegisterProduct(port);
+
+        assertInstanceOf(RegistrationResult.Created.class,
+                registerProduct.register(new ProductRegistrationCommand("Coffee", "12", "Beverages", "0")));
+        assertInstanceOf(RegistrationResult.Created.class,
+                registerProduct.register(new ProductRegistrationCommand("Tea", "3.5", "Herbal", "4")));
+
+        assertEquals(List.of(
+                new CreatedProduct("Coffee", new BigDecimal("12.00"), "Beverages", 0),
+                new CreatedProduct("Tea", new BigDecimal("3.50"), "Herbal", 4)
+        ), port.createdProducts);
     }
 
     @Test
@@ -45,10 +61,10 @@ class RegisterProductTest {
         RegisterProduct registerProduct = new RegisterProduct(port);
 
         assertValidation(registerProduct.register(new ProductRegistrationCommand(" ", "12.50", "Beverages", "0")), "name", "Product name is required.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "0", "Beverages", "0")), "price", "Price must be a positive plain decimal with at most two fractional digits.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "-1.00", "Beverages", "0")), "price", "Price must be a positive plain decimal with at most two fractional digits.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.345", "Beverages", "0")), "price", "Price must be a positive plain decimal with at most two fractional digits.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "1E2", "Beverages", "0")), "price", "Price must be a positive plain decimal with at most two fractional digits.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "0", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "-1.00", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.345", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "1E2", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
         assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", " ", "0")), "category", "Category name is required.");
         assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "-1")), "stock", "Stock must be a non-negative whole number.");
         assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "1.5")), "stock", "Stock must be a non-negative whole number.");

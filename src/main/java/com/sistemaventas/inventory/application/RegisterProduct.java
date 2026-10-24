@@ -3,13 +3,12 @@ package com.sistemaventas.inventory.application;
 import com.sistemaventas.inventory.port.ProductRegistrationPort;
 import com.sistemaventas.inventory.port.ProductRegistrationPort.ProductDetails;
 import com.sistemaventas.inventory.port.ProductRegistrationPort.ProductRegistrationException;
-import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RegisterProduct {
-    private static final String PRICE_MESSAGE = "Price must be a positive plain decimal with at most two fractional digits.";
+    private static final String PRICE_MESSAGE = "Price must be a positive amount with at most two decimal places.";
     private static final String STOCK_MESSAGE = "Stock must be a non-negative whole number.";
     private static final String SUCCESS_MESSAGE = "Product registered successfully.";
     private static final String REGISTRATION_FAILURE_MESSAGE = "Product could not be registered. Please try again.";
@@ -68,48 +67,23 @@ public final class RegisterProduct {
         if (command == null) {
             return Validation.failed("command", "Product registration details are required.");
         }
-        String name = trim(command.name());
-        if (name.isEmpty()) {
+        String name = ProductInputValidator.trimRequired(command.name()).orElse(null);
+        if (name == null) {
             return Validation.failed("name", "Product name is required.");
         }
-        String categoryName = trim(command.categoryName());
-        if (categoryName.isEmpty()) {
+        String categoryName = ProductInputValidator.trimRequired(command.categoryName()).orElse(null);
+        if (categoryName == null) {
             return Validation.failed("category", "Category name is required.");
         }
-        BigDecimal price = parsePrice(command.price());
-        if (price == null) {
+        var price = ProductInputValidator.parsePositivePrice(command.price());
+        if (price.isEmpty()) {
             return Validation.failed("price", PRICE_MESSAGE);
         }
-        Integer stock = parseStock(command.stock());
-        if (stock == null) {
+        var stock = ProductInputValidator.parseNonNegativeStock(command.stock());
+        if (stock.isEmpty()) {
             return Validation.failed("stock", STOCK_MESSAGE);
         }
-        return Validation.valid(new ProductDetails(name, price, categoryName, stock));
-    }
-
-    private BigDecimal parsePrice(String input) {
-        String value = trim(input);
-        if (!value.matches("\\d+(?:\\.\\d{1,2})?")) {
-            return null;
-        }
-        BigDecimal price = new BigDecimal(value);
-        return price.signum() > 0 ? price : null;
-    }
-
-    private Integer parseStock(String input) {
-        String value = trim(input);
-        if (!value.matches("\\d+")) {
-            return null;
-        }
-        try {
-            return Integer.valueOf(value);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    private String trim(String value) {
-        return value == null ? "" : value.trim();
+        return Validation.valid(new ProductDetails(name, price.orElseThrow(), categoryName, stock.orElseThrow()));
     }
 
     private RegistrationResult.Failure registrationFailure() {
