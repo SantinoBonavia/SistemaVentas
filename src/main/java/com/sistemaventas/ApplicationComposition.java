@@ -3,100 +3,126 @@ package com.sistemaventas;
 import com.sistemaventas.inventory.adapter.InMemoryProductRegistrationRepository;
 import com.sistemaventas.inventory.application.BrowseProducts;
 import com.sistemaventas.inventory.application.DeleteProduct;
-import com.sistemaventas.inventory.application.ProductView;
+import com.sistemaventas.inventory.application.ReceiveStock;
 import com.sistemaventas.inventory.application.RegisterProduct;
 import com.sistemaventas.inventory.application.UpdateProduct;
-import com.sistemaventas.settings.adapter.InMemoryCurrencySettingsRepository;
-import com.sistemaventas.settings.application.ManageCurrency;
+import com.sistemaventas.persistence.DataStore;
+import com.sistemaventas.sales.adapter.InMemorySalesRepository;
+import com.sistemaventas.sales.application.CancelSale;
+import com.sistemaventas.sales.application.RegisterSale;
+import com.sistemaventas.sales.application.SalesReport;
+import com.sistemaventas.store.StoreSettings;
 import com.sistemaventas.ui.CatalogRefreshCoordinator;
+import com.sistemaventas.ui.Dialogs;
 import com.sistemaventas.ui.MainFrame;
-import com.sistemaventas.ui.ProductCatalogPanel;
-import com.sistemaventas.ui.ProductDeletionDialog;
-import com.sistemaventas.ui.ProductEditorDialog;
-import com.sistemaventas.ui.ProductRegistrationPanel;
-import com.sistemaventas.ui.SettingsDialog;
-import java.util.Objects;
+import com.sistemaventas.ui.Services;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.util.Optional;
 import java.util.function.Function;
-import javax.swing.JPanel;
+import javax.swing.JComponent;
 
-/** Database-free session composition, safe to construct in headless tests. */
+/**
+ * Arma la aplicación. Sin {@link DataStore} todo vive en memoria (pruebas); con uno, carga los datos
+ * guardados y los vuelve a guardar después de cada cambio.
+ */
 final class ApplicationComposition {
-    interface WindowHost {
-        void show(String title, Function<Runnable, JPanel> content);
-    }
-
-    private final RegisterProduct registerProduct;
-    private final BrowseProducts browseProducts;
-    private final ManageCurrency currencySettings;
+    private final InMemoryProductRegistrationRepository products;
+    private final InMemorySalesRepository sales;
+    private final Services services;
     private final MainFrame mainFrame;
-    private final ProductWindows windows;
 
-    private ApplicationComposition(RegisterProduct registerProduct, BrowseProducts browseProducts,
-                                   ManageCurrency currencySettings, MainFrame mainFrame, ProductWindows windows) {
-        this.registerProduct = registerProduct;
-        this.browseProducts = browseProducts;
-        this.currencySettings = currencySettings;
+    private ApplicationComposition(InMemoryProductRegistrationRepository products, InMemorySalesRepository sales,
+                                   Services services, MainFrame mainFrame) {
+        this.products = products;
+        this.sales = sales;
+        this.services = services;
         this.mainFrame = mainFrame;
-        this.windows = windows;
     }
 
+    /** Sesión vacía en memoria, sin ventanas: segura para pruebas sin pantalla. */
     static ApplicationComposition create() {
-        return create((title, content) -> { });
+        return create(new NoDialogs(), null, Clock.systemDefaultZone(), false);
     }
 
-    static ApplicationComposition create(WindowHost windowHost) {
+    static ApplicationComposition create(Dialogs dialogs, DataStore store, Clock clock, boolean seedWhenEmpty) {
         InMemoryProductRegistrationRepository products = new InMemoryProductRegistrationRepository();
-        InMemoryCurrencySettingsRepository currencies = new InMemoryCurrencySettingsRepository();
+        InMemorySalesRepository sales = new InMemorySalesRepository();
+        StoreSettings storeSettings = new StoreSettings();
+        boolean restored = store != null && restore(store, products, sales, storeSettings);
+
         RegisterProduct registerProduct = new RegisterProduct(products);
-        BrowseProducts browseProducts = new BrowseProducts(products);
-        UpdateProduct updateProduct = new UpdateProduct(products);
-        DeleteProduct deleteProduct = new DeleteProduct(products);
-        ManageCurrency currencySettings = new ManageCurrency(currencies);
-        CatalogRefreshCoordinator refresh = new CatalogRefreshCoordinator();
-        ProductWindows windows = new ProductWindows(windowHost, updateProduct, deleteProduct, currencySettings, refresh);
-        ProductRegistrationPanel registration = new ProductRegistrationPanel(registerProduct, refresh);
-        ProductCatalogPanel catalog = new ProductCatalogPanel(browseProducts, refresh, currencySettings::load,
-                windows::openEditor, windows::openDeletion);
-        MainFrame mainFrame = new MainFrame(registration, catalog, windows::openSettings);
-        return new ApplicationComposition(registerProduct, browseProducts, currencySettings, mainFrame, windows);
+        if (!restored && seedWhenEmpty) {
+            DemoCatalog.load(registerProduct);
+        }
+        if (store != null) {
+            Runnable save = () -> save(store, products, sales, storeSettings);
+            products.onChange(save);
+            sales.onChange(save);
+            storeSettings.onChange(save);
+            if (!restored) save.run();
+        }
+
+        CatalogRefreshCoordinator events = new CatalogRefreshCoordinator();
+        Services services = new Services(new BrowseProducts(products), registerProduct, new UpdateProduct(products),
+                new DeleteProduct(products), new ReceiveStock(products, products),
+                new RegisterSale(products, sales, storeSettings::profile, clock), new CancelSale(products, sales),
+                new SalesReport(sales), storeSettings, products::categoryNames,
+                store == null ? Path.of(System.getProperty("java.io.tmpdir"), "sistemaventas-fotos") : store.photosDirectory(),
+                store == null ? null : store.file(), events, dialogs, clock);
+        return new ApplicationComposition(products, sales, services, new MainFrame(services));
     }
 
-    RegisterProduct registerProduct() { return registerProduct; }
-    BrowseProducts browseProducts() { return browseProducts; }
-    ManageCurrency currencySettings() { return currencySettings; }
+    Services services() { return services; }
     MainFrame mainFrame() { return mainFrame; }
-    void openEditor(ProductView product) { windows.openEditor(product); }
-    void openDeletion(ProductView product) { windows.openDeletion(product); }
-    void openSettings() { windows.openSettings(); }
+    InMemoryProductRegistrationRepository products() { return products; }
+    InMemorySalesRepository sales() { return sales; }
 
-    private static final class ProductWindows {
-        private final WindowHost host;
-        private final UpdateProduct updateProduct;
-        private final DeleteProduct deleteProduct;
-        private final ManageCurrency currencySettings;
-        private final CatalogRefreshCoordinator refresh;
+    private static boolean restore(DataStore store, InMemoryProductRegistrationRepository products,
+                                   InMemorySalesRepository sales, StoreSettings settings) {
+        try {
+            Optional<DataStore.Snapshot> snapshot = store.load();
+            snapshot.ifPresent(saved -> {
+                products.importState(saved.inventory());
+                sales.importState(saved.sales());
+                settings.restore(saved.store());
+            });
+            return snapshot.isPresent();
+        } catch (IOException exception) {
+            throw new IllegalStateException("No se pudieron leer los datos guardados en " + store.file()
+                    + ". Revisá el archivo o movelo para empezar de cero.", exception);
+        }
+    }
 
-        private ProductWindows(WindowHost host, UpdateProduct updateProduct, DeleteProduct deleteProduct,
-                               ManageCurrency currencySettings, CatalogRefreshCoordinator refresh) {
-            this.host = Objects.requireNonNull(host);
-            this.updateProduct = updateProduct;
-            this.deleteProduct = deleteProduct;
-            this.currencySettings = currencySettings;
-            this.refresh = refresh;
+    private static void save(DataStore store, InMemoryProductRegistrationRepository products,
+                             InMemorySalesRepository sales, StoreSettings settings) {
+        try {
+            store.save(new DataStore.Snapshot(products.exportState(), sales.exportState(), settings.profile()));
+        } catch (IOException exception) {
+            System.err.println("No se pudieron guardar los datos en " + store.file() + ": " + exception.getMessage());
+        }
+    }
+
+    /** Diálogos inertes para pruebas: confirman todo y no muestran nada. */
+    static final class NoDialogs implements Dialogs {
+        @Override
+        public void show(String title, Function<Runnable, JComponent> content) {
+            content.apply(() -> { });
         }
 
-        private void openEditor(ProductView product) {
-            host.show("Edit Product", close -> new ProductEditorDialog(updateProduct, refresh, product,
-                    currencySettings.load(), ProductEditorDialog::confirm, close));
+        @Override
+        public boolean confirm(String title, String message, String confirmLabel) {
+            return true;
         }
 
-        private void openDeletion(ProductView product) {
-            host.show("Delete Product", close -> new ProductDeletionDialog(deleteProduct, refresh, product,
-                    ProductDeletionDialog::confirm, close));
+        @Override
+        public void message(String title, String message) {
         }
 
-        private void openSettings() {
-            host.show("Settings", close -> new SettingsDialog(currencySettings, refresh, () -> { }, () -> { }, close));
+        @Override
+        public Optional<Path> choosePhoto() {
+            return Optional.empty();
         }
     }
 }
