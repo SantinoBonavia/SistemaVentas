@@ -8,11 +8,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RegisterProduct {
-    private static final String PRICE_MESSAGE = "Price must be a positive amount with at most two decimal places.";
-    private static final String STOCK_MESSAGE = "Stock must be a non-negative whole number.";
-    private static final String SUCCESS_MESSAGE = "Product registered successfully.";
-    private static final String REGISTRATION_FAILURE_MESSAGE = "Product could not be registered. Please try again.";
-    private static final String CONFIRMATION_FAILURE_MESSAGE = "Duplicate confirmation is invalid or has expired.";
+    private static final String SUCCESS_MESSAGE = "Producto cargado correctamente.";
+    private static final String REGISTRATION_FAILURE_MESSAGE = "No se pudo cargar el producto. Intentá de nuevo.";
+    private static final String CONFIRMATION_FAILURE_MESSAGE = "La confirmación de duplicado no es válida o expiró.";
 
     private final ProductRegistrationPort port;
     private final Map<String, ProductDetails> pendingDuplicates = new ConcurrentHashMap<>();
@@ -65,25 +63,18 @@ public final class RegisterProduct {
 
     private Validation validate(ProductRegistrationCommand command) {
         if (command == null) {
-            return Validation.failed("command", "Product registration details are required.");
+            return Validation.failed("command", "Faltan los datos del producto.");
         }
-        String name = ProductInputValidator.trimRequired(command.name()).orElse(null);
-        if (name == null) {
-            return Validation.failed("name", "Product name is required.");
+        var parsed = ProductInputValidator.parseDetails(command.name(), command.categoryName(), command.price(),
+                command.stock(), command.code(), command.ivaPercent(), command.minStock(), command.image());
+        if (parsed.failed()) {
+            return Validation.failed(parsed.field(), parsed.message());
         }
-        String categoryName = ProductInputValidator.trimRequired(command.categoryName()).orElse(null);
-        if (categoryName == null) {
-            return Validation.failed("category", "Category name is required.");
+        String code = parsed.details().code();
+        if (!code.isEmpty() && port.productCodeExists(code, 0)) {
+            return Validation.failed("code", ProductInputValidator.DUPLICATE_CODE_MESSAGE);
         }
-        var price = ProductInputValidator.parsePositivePrice(command.price());
-        if (price.isEmpty()) {
-            return Validation.failed("price", PRICE_MESSAGE);
-        }
-        var stock = ProductInputValidator.parseNonNegativeStock(command.stock());
-        if (stock.isEmpty()) {
-            return Validation.failed("stock", STOCK_MESSAGE);
-        }
-        return Validation.valid(new ProductDetails(name, price.orElseThrow(), categoryName, stock.orElseThrow()));
+        return Validation.valid(parsed.details());
     }
 
     private RegistrationResult.Failure registrationFailure() {

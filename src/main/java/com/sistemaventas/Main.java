@@ -1,12 +1,13 @@
 package com.sistemaventas;
 
-import java.awt.BorderLayout;
-import java.awt.Dialog;
-import java.awt.Window;
-import java.util.function.Function;
-import javax.swing.JDialog;
+import com.sistemaventas.persistence.DataStore;
+import com.sistemaventas.ui.SwingDialogs;
+import com.sistemaventas.ui.Theme;
+import java.awt.Dimension;
+import java.awt.Toolkit;
+import java.time.Clock;
 import javax.swing.JFrame;
-import javax.swing.JPanel;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
 public final class Main {
@@ -17,27 +18,25 @@ public final class Main {
         SwingUtilities.invokeLater(Main::start);
     }
 
-    static ApplicationComposition createComposition() {
-        return ApplicationComposition.create(Main::showDialog);
-    }
-
     private static void start() {
-        ApplicationComposition application = createComposition();
-        JFrame frame = new JFrame("SistemaVentas - Product Inventory");
+        Theme.install();
+        JFrame frame = new JFrame("Sistema de Ventas — Ferretería");
+        ApplicationComposition application;
+        try {
+            application = ApplicationComposition.create(new SwingDialogs(() -> frame), DataStore.defaultLocation(),
+                    Clock.systemDefaultZone(), true);
+        } catch (IllegalStateException exception) {
+            JOptionPane.showMessageDialog(null, exception.getMessage(), "Sistema de Ventas", JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+            return;
+        }
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.add(application.mainFrame().component());
-        frame.setSize(960, 700);
+        frame.setIconImage(com.sistemaventas.ui.ToolArt.image("llave", 64));
+        frame.setContentPane(application.mainFrame().component());
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        frame.setMinimumSize(new Dimension(1180, 720));
+        frame.setSize(Math.min(1500, screen.width - 40), Math.min(900, screen.height - 60));
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-    }
-
-    private static void showDialog(String title, Function<Runnable, JPanel> content) {
-        JDialog dialog = new JDialog((Window) null, title, Dialog.ModalityType.APPLICATION_MODAL);
-        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        dialog.setLayout(new BorderLayout());
-        dialog.add(content.apply(dialog::dispose), BorderLayout.CENTER);
-        dialog.pack();
-        dialog.setLocationRelativeTo(null);
-        dialog.setVisible(true);
     }
 }

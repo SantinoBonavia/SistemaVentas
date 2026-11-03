@@ -19,7 +19,7 @@ public final class UpdateProduct {
         Validation validation = validate(command);
         if (validation.failure() != null) return validation.failure();
         PendingUpdate pending = validation.pending();
-        if (port.findProductById(pending.id()).isEmpty()) return new UpdateResult.Failure("Product was not found.");
+        if (port.findProductById(pending.id()).isEmpty()) return new UpdateResult.Failure("No se encontró el producto.");
         if (port.productNameExistsExcludingId(pending.product().name(), pending.id())) {
             String token = UUID.randomUUID().toString();
             pendingUpdates.put(token, pending);
@@ -30,7 +30,7 @@ public final class UpdateProduct {
 
     public UpdateResult confirm(String token) {
         PendingUpdate pending = pendingUpdates.remove(token);
-        return pending == null ? new UpdateResult.Failure("Update confirmation is invalid or has expired.") : replace(pending);
+        return pending == null ? new UpdateResult.Failure("La confirmación no es válida o expiró.") : replace(pending);
     }
 
     public void cancel(ProductUpdateConfirmation confirmation) {
@@ -42,21 +42,20 @@ public final class UpdateProduct {
             port.updateProduct(pending.id(), pending.product());
             return new UpdateResult.Updated(pending.id());
         } catch (ProductRegistrationException exception) {
-            return new UpdateResult.Failure("Product could not be updated.");
+            return new UpdateResult.Failure("No se pudo actualizar el producto.");
         }
     }
 
     private Validation validate(UpdateProductCommand command) {
-        if (command == null || command.id() <= 0) return Validation.failed("id", "Product ID is required.");
-        String name = ProductInputValidator.trimRequired(command.name()).orElse(null);
-        if (name == null) return Validation.failed("name", "Product name is required.");
-        String category = ProductInputValidator.trimRequired(command.categoryName()).orElse(null);
-        if (category == null) return Validation.failed("category", "Category name is required.");
-        var price = ProductInputValidator.parsePositivePrice(command.price());
-        if (price.isEmpty()) return Validation.failed("price", "Price must be a positive amount with at most two decimal places.");
-        var stock = ProductInputValidator.parseNonNegativeStock(command.stock());
-        if (stock.isEmpty()) return Validation.failed("stock", "Stock must be a non-negative whole number.");
-        return Validation.valid(new PendingUpdate(command.id(), new ProductDetails(name, price.orElseThrow(), category, stock.orElseThrow())));
+        if (command == null || command.id() <= 0) return Validation.failed("id", "Falta el identificador del producto.");
+        var parsed = ProductInputValidator.parseDetails(command.name(), command.categoryName(), command.price(),
+                command.stock(), command.code(), command.ivaPercent(), command.minStock(), command.image());
+        if (parsed.failed()) return Validation.failed(parsed.field(), parsed.message());
+        String code = parsed.details().code();
+        if (!code.isEmpty() && port.productCodeExists(code, command.id())) {
+            return Validation.failed("code", ProductInputValidator.DUPLICATE_CODE_MESSAGE);
+        }
+        return Validation.valid(new PendingUpdate(command.id(), parsed.details()));
     }
 
     private record PendingUpdate(long id, ProductDetails product) {}

@@ -1,86 +1,84 @@
 package com.sistemaventas;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sistemaventas.inventory.application.ProductRegistrationCommand;
-import com.sistemaventas.inventory.application.RegistrationResult;
 import com.sistemaventas.inventory.application.ProductView;
-import com.sistemaventas.ui.ProductDeletionDialog;
-import com.sistemaventas.ui.ProductEditorDialog;
-import com.sistemaventas.ui.SettingsDialog;
+import com.sistemaventas.inventory.application.RegistrationResult;
+import com.sistemaventas.persistence.DataStore;
+import com.sistemaventas.sales.application.PaymentMethod;
+import com.sistemaventas.sales.application.RegisterSale;
+import com.sistemaventas.sales.application.SaleLine;
+import com.sistemaventas.ui.MainFrame;
+import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.time.Clock;
 import java.util.ArrayList;
-import java.util.Currency;
 import java.util.List;
-import java.util.Optional;
-import java.util.function.Function;
-import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ApplicationCompositionTest {
 
     @Test
-    void createsTwoHeadlessSafeTabsOverOneFreshInMemoryProductSession() throws Exception {
-        ApplicationComposition composition = onEdt(Main::createComposition);
+    void startsAnEmptyInMemorySessionWithTheFourSectionsAndSellingFirst() throws Exception {
+        ApplicationComposition composition = onEdt(ApplicationComposition::create);
 
-        assertEquals(2, composition.mainFrame().tabs().getTabCount());
-        assertEquals("Load Product", composition.mainFrame().tabs().getTitleAt(0));
-        assertEquals("Products", composition.mainFrame().tabs().getTitleAt(1));
-        assertInstanceOf(RegistrationResult.Created.class, composition.registerProduct().register(
-                new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "3")
-        ));
-        assertEquals(List.of("Coffee"), composition.browseProducts().list().stream().map(ProductView::name).toList());
+        assertTrue(composition.services().browse().list().isEmpty());
+        assertEquals(MainFrame.Section.VENDER, composition.mainFrame().current());
+        assertEquals(4, MainFrame.Section.values().length);
+        assertInstanceOf(RegistrationResult.Created.class, composition.services().register().register(
+                new ProductRegistrationCommand("Martillo", "18.900", "Herramientas", "3")));
+        assertEquals(List.of("Martillo"), composition.services().browse().list().stream().map(ProductView::name).toList());
     }
 
     @Test
-    void wiresCatalogAndSettingsActionsToHeadlessControllersWithoutDatabaseStartup() throws Exception {
-        RecordingWindows windows = new RecordingWindows();
-        ApplicationComposition composition = onEdt(() -> ApplicationComposition.create(windows));
-        composition.registerProduct().register(new ProductRegistrationCommand("Tea", "4.20", "Beverages", "2"));
-        ProductView tea = composition.browseProducts().list().getFirst();
+    void seedsTheHardwareCatalogOnFirstRunAndRestoresSalesAndStockAfterRestart(@TempDir Path directory) throws Exception {
+        DataStore store = new DataStore(directory);
+        ApplicationComposition first = onEdt(() -> ApplicationComposition.create(
+                new ApplicationComposition.NoDialogs(), store, Clock.systemDefaultZone(), true));
+        List<ProductView> catalog = first.services().browse().list();
+        assertEquals(24, catalog.size());
+        assertTrue(catalog.stream().allMatch(product -> product.image().startsWith("art:")));
+        ProductView hammer = catalog.stream().filter(product -> product.code().equals("MAR-001")).findFirst().orElseThrow();
 
-        composition.openEditor(tea);
-        composition.openDeletion(tea);
-        composition.openSettings();
+        RegisterSale.Result sale = first.services().registerSale().checkout(new RegisterSale.Checkout(
+                List.of(new SaleLine(hammer.id(), hammer.code(), hammer.name(), hammer.ivaPercent(), hammer.price(), 2)),
+                BigDecimal.ZERO, PaymentMethod.EFECTIVO, null, null));
+        assertInstanceOf(RegisterSale.Result.Completed.class, sale);
 
-        assertEquals(3, windows.panels.size());
-        assertInstanceOf(ProductEditorDialog.class, windows.panels.get(0));
-        assertInstanceOf(ProductDeletionDialog.class, windows.panels.get(1));
-        assertInstanceOf(SettingsDialog.class, windows.panels.get(2));
-        assertEquals(Optional.of(Currency.getInstance("ARS")), composition.currencySettings().load());
+        ApplicationComposition restarted = onEdt(() -> ApplicationComposition.create(
+                new ApplicationComposition.NoDialogs(), store, Clock.systemDefaultZone(), true));
+        assertEquals(24, restarted.services().browse().list().size());
+        assertEquals(hammer.stock() - 2, restarted.services().browse().list().stream()
+                .filter(product -> product.id() == hammer.id()).findFirst().orElseThrow().stock());
+        assertEquals(1, restarted.sales().list().size());
+        assertEquals(2, restarted.sales().nextNumber());
     }
 
     @Test
-    void startsASeparateEmptySessionForEveryCompositionRoot() throws Exception {
+    void inMemorySessionsDoNotShareState() throws Exception {
         ApplicationComposition first = onEdt(ApplicationComposition::create);
-        first.registerProduct().register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "3"));
+        first.services().register().register(new ProductRegistrationCommand("Pinza", "13.700", "Herramientas", "3"));
 
-        ApplicationComposition restarted = onEdt(ApplicationComposition::create);
+        ApplicationComposition second = onEdt(ApplicationComposition::create);
 
-        assertEquals(1, first.browseProducts().list().size());
-        assertTrue(restarted.browseProducts().list().isEmpty());
-        assertEquals(Optional.of(Currency.getInstance("ARS")), restarted.currencySettings().load());
+        assertEquals(1, first.services().browse().list().size());
+        assertFalse(second.services().browse().list().size() > 0);
     }
 
-    private static <T> T onEdt(ThrowingSupplier<T> supplier) throws Exception {
+    static <T> T onEdt(ThrowingSupplier<T> supplier) throws Exception {
         final List<T> result = new ArrayList<>();
         SwingUtilities.invokeAndWait(() -> result.add(supplier.get()));
         return result.getFirst();
     }
 
     @FunctionalInterface
-    private interface ThrowingSupplier<T> {
+    interface ThrowingSupplier<T> {
         T get();
-    }
-
-    private static final class RecordingWindows implements ApplicationComposition.WindowHost {
-        private final List<JPanel> panels = new ArrayList<>();
-
-        @Override
-        public void show(String title, Function<Runnable, JPanel> content) {
-            panels.add(content.apply(() -> { }));
-        }
     }
 }

@@ -16,7 +16,7 @@ public final class DeleteProduct {
 
     public DeleteResult delete(long id) {
         if (id <= 0 || port.findProductById(id).isEmpty()) {
-            return new DeleteResult.Failure("Product was not found.");
+            return new DeleteResult.Failure("No se encontró el producto.");
         }
         String token = UUID.randomUUID().toString();
         pendingDeletions.put(token, id);
@@ -26,13 +26,13 @@ public final class DeleteProduct {
     public DeleteResult confirm(String token) {
         Long id = token == null ? null : pendingDeletions.remove(token);
         if (id == null) {
-            return new DeleteResult.Failure("Deletion confirmation is invalid or has expired.");
+            return new DeleteResult.Failure("La confirmación de baja no es válida o expiró.");
         }
         try {
             port.deleteProduct(id);
             return new DeleteResult.Deleted(id);
         } catch (ProductRegistrationException exception) {
-            return new DeleteResult.Failure("Product could not be deleted.");
+            return new DeleteResult.Failure("No se pudo eliminar el producto.");
         }
     }
 

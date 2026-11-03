@@ -33,7 +33,7 @@ class RegisterProductTest {
 
         RegistrationResult.Created created = assertInstanceOf(RegistrationResult.Created.class, result);
         assertEquals(1L, created.productId());
-        assertEquals("Product registered successfully.", created.message());
+        assertEquals("Producto cargado correctamente.", created.message());
         assertEquals(List.of(new CreatedProduct("Coffee", new BigDecimal("2400.00"), "Beverages", 0)), port.createdProducts);
         assertEquals(2, port.createdProducts.get(0).price().scale());
         assertEquals(Set.of("Beverages"), port.categories);
@@ -60,14 +60,14 @@ class RegisterProductTest {
         FakeProductRegistrationPort port = new FakeProductRegistrationPort();
         RegisterProduct registerProduct = new RegisterProduct(port);
 
-        assertValidation(registerProduct.register(new ProductRegistrationCommand(" ", "12.50", "Beverages", "0")), "name", "Product name is required.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "0", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "-1.00", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.345", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "1E2", "Beverages", "0")), "price", "Price must be a positive amount with at most two decimal places.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", " ", "0")), "category", "Category name is required.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "-1")), "stock", "Stock must be a non-negative whole number.");
-        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "1.5")), "stock", "Stock must be a non-negative whole number.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand(" ", "12.50", "Beverages", "0")), "name", "El nombre del producto es obligatorio.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "0", "Beverages", "0")), "price", "El precio debe ser un importe positivo con hasta dos decimales.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "-1.00", "Beverages", "0")), "price", "El precio debe ser un importe positivo con hasta dos decimales.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12,345", "Beverages", "0")), "price", "El precio debe ser un importe positivo con hasta dos decimales.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "1E2", "Beverages", "0")), "price", "El precio debe ser un importe positivo con hasta dos decimales.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", " ", "0")), "category", "La categoría es obligatoria.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "-1")), "stock", "El stock debe ser un número entero mayor o igual a cero.");
+        assertValidation(registerProduct.register(new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "1.5")), "stock", "El stock debe ser un número entero mayor o igual a cero.");
         assertEquals(List.of(), port.createdProducts);
         assertEquals(Set.of(), port.categories);
         assertEquals(0, port.duplicateChecks);
@@ -106,7 +106,7 @@ class RegisterProductTest {
         RegistrationResult confirmation = registerProduct.confirm(confirmationRequired.confirmation().token());
 
         assertNotEquals("Coffee", confirmationRequired.confirmation().token());
-        assertFailure(confirmation, "Duplicate confirmation is invalid or has expired.");
+        assertFailure(confirmation, "La confirmación de duplicado no es válida o expiró.");
         assertEquals(List.of(), port.createdProducts);
         assertEquals(Set.of(), port.categories);
     }
@@ -144,7 +144,7 @@ class RegisterProductTest {
 
         registerProduct.cancel(coffee.confirmation());
 
-        assertFailure(registerProduct.confirm(coffee.confirmation().token()), "Duplicate confirmation is invalid or has expired.");
+        assertFailure(registerProduct.confirm(coffee.confirmation().token()), "La confirmación de duplicado no es válida o expiró.");
         assertInstanceOf(RegistrationResult.Created.class, registerProduct.confirm(tea.confirmation().token()));
         assertEquals(List.of(new CreatedProduct("Tea", new BigDecimal("3.25"), "Herbal", 4)), port.createdProducts);
         assertEquals(Set.of("Herbal"), port.categories);
@@ -164,7 +164,7 @@ class RegisterProductTest {
         RegistrationResult forged = registerProduct.confirm("forged-token");
         RegistrationResult confirmed = registerProduct.confirm(coffee.confirmation().token());
 
-        assertFailure(forged, "Duplicate confirmation is invalid or has expired.");
+        assertFailure(forged, "La confirmación de duplicado no es válida o expiró.");
         assertInstanceOf(RegistrationResult.Created.class, confirmed);
         assertEquals(List.of(new CreatedProduct("Coffee", new BigDecimal("12.50"), "Beverages", 0)), port.createdProducts);
         assertEquals(Set.of("Beverages"), port.categories);
@@ -180,7 +180,7 @@ class RegisterProductTest {
                 new ProductRegistrationCommand("Coffee", "12.50", "Beverages", "0")
         );
 
-        assertFailure(result, "Product could not be registered. Please try again.");
+        assertFailure(result, "No se pudo cargar el producto. Intentá de nuevo.");
     }
 
     @Test

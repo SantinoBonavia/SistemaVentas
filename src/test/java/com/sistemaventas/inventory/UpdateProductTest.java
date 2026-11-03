@@ -44,7 +44,7 @@ class UpdateProductTest {
         assertInstanceOf(UpdateResult.Failure.class,
                 updateProduct.update(new UpdateProductCommand(99, "Tea", "3.25", "Herbal", "1")));
         assertInstanceOf(UpdateResult.ValidationFailed.class,
-                updateProduct.update(new UpdateProductCommand(1, "Tea", "3.257", "Herbal", "1")));
+                updateProduct.update(new UpdateProductCommand(1, "Tea", "3,257", "Herbal", "1")));
         assertEquals(List.of(new com.sistemaventas.inventory.application.ProductView(1, "Coffee", "Beverages", new BigDecimal("12.50"), 0)), repository.listProducts());
     }
 

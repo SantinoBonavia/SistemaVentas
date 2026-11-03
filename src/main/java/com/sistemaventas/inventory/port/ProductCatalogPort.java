@@ -15,15 +15,19 @@ public interface ProductCatalogPort {
         return Optional.empty();
     }
 
+    default boolean productCodeExists(String code, long excludingId) {
+        return false;
+    }
+
     default boolean productNameExistsExcludingId(String productName, long id) {
         return false;
     }
 
     default void updateProduct(long id, ProductDetails product) throws ProductRegistrationPort.ProductRegistrationException {
-        throw new ProductRegistrationPort.ProductRegistrationException("Product updates are not supported.");
+        throw new ProductRegistrationPort.ProductRegistrationException("Este catálogo no admite modificaciones.");
     }
 
     default void deleteProduct(long id) throws ProductRegistrationPort.ProductRegistrationException {
-        throw new ProductRegistrationPort.ProductRegistrationException("Product deletion is not supported.");
+        throw new ProductRegistrationPort.ProductRegistrationException("Este catálogo no admite bajas.");
     }
 }

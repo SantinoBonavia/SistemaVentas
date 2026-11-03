@@ -24,12 +24,14 @@ class ProductInputValidatorTest {
         assertEquals(new BigDecimal("2400.00"), ProductInputValidator.parsePositivePrice("2.400,00").orElseThrow());
         assertEquals(new BigDecimal("2400.00"), ProductInputValidator.parsePositivePrice("  $2.400,00  ").orElseThrow());
         assertEquals(new BigDecimal("12.50"), ProductInputValidator.parsePositivePrice("$12,5").orElseThrow());
+        assertEquals(new BigDecimal("18000.00"), ProductInputValidator.parsePositivePrice("18.000").orElseThrow());
+        assertEquals(new BigDecimal("1250000.00"), ProductInputValidator.parsePositivePrice("$1.250.000").orElseThrow());
     }
 
     @Test
     void rejectsNonPlainNonPositiveAndOverPrecisePrices() {
         for (String value : new String[]{
-                "0", "$0,00", "-1", "$-1,00", "1E2", "12.345", "12,345", "12.", "12,",
+                "0", "$0,00", "-1", "$-1,00", "1E2", "12,345", "12.", "12,",
                 "2.40,00", "24.00,00", "2.4000,00", "2,400.00", "$ 2.400,00", "abc"
         }) {
             assertTrue(ProductInputValidator.parsePositivePrice(value).isEmpty(), value);
